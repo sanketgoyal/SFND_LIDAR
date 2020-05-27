@@ -50,6 +50,14 @@ void simpleHighway(pcl::visualization::PCLVisualizer::Ptr& viewer)
     // TODO:: Create point processor
   
 }
+void cityBlock(pcl::visualization::PCLVisualizer::Ptr& viewer, ProcessPointClouds<pcl::PointXYZI>* pointProcessorI, pcl::PointCloud<pcl::PointXYZI>::Ptr& inputCloud)
+{
+    //ProcessPointClouds<pcl::PointXYZI> pointProcessor;
+    // pcl::PointCloud<pcl::PointXYZI>::Ptr inputCloud = pointProcessor.loadPcd("../src/sensors/data/pcd/data_1/0000000000.pcd");
+    pcl::PointCloud<pcl::PointXYZI>::Ptr filterCloud = pointProcessorI->FilterCloud(inputCloud, 0.2, Eigen::Vector4f(-15, -6, -3, 1), Eigen::Vector4f(20, 6, 3, 1));
+
+}
+
 
 
 //setAngle: SWITCH CAMERA ANGLE {XY, TopDown, Side, FPS}
@@ -83,10 +91,20 @@ int main (int argc, char** argv)
     pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
     CameraAngle setAngle = XY;
     initCamera(setAngle, viewer);
-    simpleHighway(viewer);
-
+    //simpleHighway(viewer);
+    ProcessPointClouds<pcl::PointXYZI>* pointProcessorI = new ProcessPointClouds<pcl::PointXYZI>();
+    std::vector<boost::filesystem::path> stream = pointProcessorI ->streamPcd("../src/sensors/data/pcd/data_1");
+    auto streamIt = stream.begin();
     while (!viewer->wasStopped ())
     {
+      viewer->removeAllPointClouds();
+      viewer->removeAllShapes();
+
+       pcl::PointCloud<pcl::PointXYZI>::Ptr inputCloud = pointProcessorI->loadPcd((*streamIt).string());
+       cityBlock(viewer, pointProcessorI, inputCloud);
+       streamIt +=1;
+       if(streamIt==stream.end())
+       streamIt = stream.begin();
         viewer->spinOnce ();
-    } 
+    }
 }
