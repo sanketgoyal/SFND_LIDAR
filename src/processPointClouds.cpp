@@ -75,13 +75,92 @@ typename pcl::PointCloud<PointT>::Ptr ProcessPointClouds<PointT>::FilterCloud(ty
 
 
 
+// template<typename PointT>
+// std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::SeparateClouds(pcl::PointIndices::Ptr inliers, typename pcl::PointCloud<PointT>::Ptr cloud) 
+// {
+//   // TODO: Create two new point clouds, one cloud with obstacles and other with segmented plane
+
+//     std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> segResult(cloud, cloud);
+//     return segResult;
+// }
+
+
+
+
+template<typename PointT>
+// std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::RansacPlane(typename pcl::PointCloud<PointT>::Ptr cloud, int maxIterations, float distanceTol)
+std::unordered_set<int> ProcessPointClouds<PointT>::RansacPlane(typename pcl::PointCloud<PointT>::Ptr cloud, int maxIterations, float distanceTol)
+{
+std::unordered_set<int>inliersResult;
+	while(maxIterations--){
+		std::unordered_set<int> inliers;
+		while(inliers.size()<3){
+			inliers.insert(rand()%(cloud->points.size()));
+		}
+		float x1, y1, x2, y2, x3, y3, z1, z2, z3;
+
+		auto itr = inliers.begin();
+		x1 = cloud -> points[*itr].x;
+		y1 = cloud -> points[*itr].y;
+		z1 = cloud -> points[*itr].z;
+		itr++;
+		x2 = cloud -> points[*itr].x;
+		y2 = cloud -> points[*itr].y;
+		z2 = cloud -> points[*itr].z;
+		itr++;
+		x3 = cloud -> points[*itr].x;
+		y3 = cloud -> points[*itr].y;
+		z3 = cloud -> points[*itr].z;
+		
+		std::vector <float> v1{x2 - x1, y2 - y1, z2 - z1};
+		std::vector <float> v2{x3 - x1, y3 - y1, z3 - z1};
+		
+		float a = (v1[1]*v2[2] - v1[2]*v2[1]);
+		float b = (v1[2]*v2[1] - v1[0]*v2[2]);
+		float c = (v1[0]*v2[1] - v1[1]*v2[0]);
+		float d = - (a*x1 + b* y1 + c * z1);
+
+		for(int i = 0; i <cloud ->points.size(); i++){
+			if(inliers.count(i) > 0) continue;
+
+			float nx = cloud -> points[i].x;
+			float ny = cloud -> points[i].y;
+			float nz = cloud -> points[i].z;
+			float dist = fabs (a* nx + b * ny + c * nz + d)/sqrt(a*a + b*b + c*c);
+		
+			if ((dist <= distanceTol)){
+				inliers.insert(i);
+			}
+		}
+
+		if (inliers.size() > inliersResult.size()) {
+			inliersResult = inliers;
+		}
+    }
+    return inliersResult;
+}
+
 template<typename PointT>
 std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::SeparateClouds(pcl::PointIndices::Ptr inliers, typename pcl::PointCloud<PointT>::Ptr cloud) 
 {
   // TODO: Create two new point clouds, one cloud with obstacles and other with segmented plane
+    typename pcl::PointCloud<PointT>::Ptr road{new pcl::PointCloud<PointT>()};
+    typename pcl::PointCloud<PointT>::Ptr obstacle{new pcl::PointCloud<PointT>()};
+    for (auto index : inliers->indices){
+      road->points.push_back(cloud->points[index]);
+    }
 
-    std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> segResult(cloud, cloud);
+    pcl::ExtractIndices<PointT> extract;
+    extract.setInputCloud(cloud);
+    extract.setIndices(inliers);
+    extract.setNegative(true);
+    extract.filter(*obstacle);
+
+
+    std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> segResult(obstacle, road);
     return segResult;
+    //std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> segResult(cloud, cloud);
+    //return segResult;
 }
 
 
@@ -90,16 +169,62 @@ std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT
 {
     // Time segmentation process
     auto startTime = std::chrono::steady_clock::now();
-	pcl::PointIndices::Ptr inliers;
-    // TODO:: Fill in this function to find inliers for the cloud.
+    pcl::PointIndices::Ptr inliers{new pcl::PointIndices};
+    // pcl::SACSegmentation<PointT> seg;
+    // // pcl::PointIndices::Ptr inliers {new pcl::PointIndices};
+    // pcl::ModelCoefficients::Ptr coefficients {new pcl::ModelCoefficients};
+
+    // seg.setOptimizeCoefficients(true);
+    // seg.setModelType(pcl::SACMODEL_PLANE);
+    // seg.setMethodType(pcl::SAC_RANSAC);
+    // seg.setMaxIterations(maxIterations);
+    // seg.setDistanceThreshold(distanceThreshold);
+
+	// //pcl::PointIndices::Ptr inliers;
+    // // TODO:: Fill in this function to find inliers for the cloud.
+
+    // seg.setInputCloud(cloud);
+    // seg.segment (*inliers, *coefficients);
+    // if(inliers -> indices.size() == 0){
+    //     std::cout<< "Could not estimate a planar model for the given dataset." <<std::endl;
+    // }
+
+    std::unordered_set<int> inliers_points = RansacPlane(cloud, maxIterations, distanceThreshold);
+    for(auto point : inliers_points)
+      inliers->indices.push_back(point);
+    if (inliers -> indices.size() == 0){
+      std::cout << " Could not find a planar model for the given cloud input" << std::endl;
+    }
+
+
+
+    std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> segResult = SeparateClouds(inliers,cloud);
 
     auto endTime = std::chrono::steady_clock::now();
     auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
     std::cout << "plane segmentation took " << elapsedTime.count() << " milliseconds" << std::endl;
 
-    std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> segResult = SeparateClouds(inliers,cloud);
     return segResult;
 }
+
+
+
+
+// template<typename PointT>
+// std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::SegmentPlane(typename pcl::PointCloud<PointT>::Ptr cloud, int maxIterations, float distanceThreshold)
+// {
+//     // Time segmentation process
+//     auto startTime = std::chrono::steady_clock::now();
+// 	pcl::PointIndices::Ptr inliers;
+//     // TODO:: Fill in this function to find inliers for the cloud.
+
+//     auto endTime = std::chrono::steady_clock::now();
+//     auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+//     std::cout << "plane segmentation took " << elapsedTime.count() << " milliseconds" << std::endl;
+
+//     std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> segResult = SeparateClouds(inliers,cloud);
+//     return segResult;
+// }
 
 
 template<typename PointT>
